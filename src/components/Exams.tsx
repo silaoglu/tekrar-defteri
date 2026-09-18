@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
 import { TYT, net, examTotals, type Exam, type Section } from '../lib/data'
 
 type Props = { toast: (t: string) => void }
@@ -39,16 +39,9 @@ export default function Exams({ toast }: Props) {
   const [reload, setReload] = useState(0)
   useEffect(() => {
     let live = true
-    supabase
-      .from('exams')
-      .select('id,name,taken_on,sections,time_blank')
-      .order('taken_on')
-      .order('created_at')
-      .then(({ data, error }) => {
-        if (!live) return
-        if (error) setError('Denemeler yüklenemedi.')
-        else setExams(data as Exam[])
-      })
+    api<Exam[]>('/exams')
+      .then((data) => live && setExams(data))
+      .catch(() => live && setError('Denemeler yüklenemedi.'))
     return () => {
       live = false
     }
@@ -64,13 +57,20 @@ export default function Exams({ toast }: Props) {
   async function save() {
     if (problem || saving || !exams) return
     setSaving(true)
-    const { error } = await supabase.from('exams').insert({
-      name: `Deneme ${exams.length + 1}`,
-      sections: parsed,
-      time_blank: timeBlank === '' ? null : Number(timeBlank),
-    })
+    try {
+      await api('/exams', {
+        method: 'POST',
+        json: {
+          name: `Deneme ${exams.length + 1}`,
+          sections: parsed,
+          time_blank: timeBlank === '' ? null : Number(timeBlank),
+        },
+      })
+    } catch {
+      setSaving(false)
+      return toast('Kaydedilemedi, tekrar dene')
+    }
     setSaving(false)
-    if (error) return toast('Kaydedilemedi, tekrar dene')
     setAdding(false)
     setRows(TYT.map(() => ({ d: '', y: '' })))
     setTimeBlank('')

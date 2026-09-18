@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { authClient } from '../lib/auth'
 
 export default function Auth() {
   const [mode, setMode] = useState<'in' | 'up'>('in')
@@ -14,13 +14,18 @@ export default function Auth() {
     setBusy(true)
     setError('')
     setInfo('')
-    if (mode === 'in') {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) setError('E-posta ya da şifre hatalı.')
-    } else {
-      const { data, error } = await supabase.auth.signUp({ email, password })
-      if (error) setError(error.message)
-      else if (!data.session) setInfo('Kayıt tamam. E-postana gelen bağlantıya tıklayıp giriş yap.')
+    if (mode === 'up') {
+      const { error } = await authClient.signUp.email({ email, password, name: email.split('@')[0] })
+      if (error) {
+        setError(error.message ?? 'Kayıt olunamadı.')
+        setBusy(false)
+        return
+      }
+    }
+    const { error } = await authClient.signIn.email({ email, password })
+    if (error) {
+      if (mode === 'up') setInfo('Kayıt tamam. E-postana gelen doğrulama kodunu/bağlantıyı kullanıp giriş yap.')
+      else setError('E-posta ya da şifre hatalı.')
     }
     setBusy(false)
   }

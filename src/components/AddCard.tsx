@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { supabase, PHOTO_BUCKET } from '../lib/supabase'
+import { api } from '../lib/api'
 import { SUBJECTS, REASONS, type Reason } from '../lib/data'
 
-type Props = { userId: string; toast: (t: string) => void }
+type Props = { toast: (t: string) => void }
 
 /** Fotoğrafı en fazla 1400 px genişliğe küçültüp JPEG'e çevirir. */
 function shrink(file: File): Promise<Blob> {
@@ -26,7 +26,7 @@ function shrink(file: File): Promise<Blob> {
   })
 }
 
-export default function AddCard({ userId, toast }: Props) {
+export default function AddCard({ toast }: Props) {
   const [subject, setSubject] = useState<string | null>(null)
   const [topic, setTopic] = useState('')
   const [reason, setReason] = useState<Reason | null>(null)
@@ -59,18 +59,16 @@ export default function AddCard({ userId, toast }: Props) {
     if (!ready || saving) return
     setSaving(true)
     setError('')
-    let photo_path: string | null = null
-    if (photo) {
-      photo_path = `${userId}/${crypto.randomUUID()}.jpg`
-      const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(photo_path, photo, { contentType: 'image/jpeg' })
-      if (error) {
-        setSaving(false)
-        return setError('Fotoğraf yüklenemedi.')
-      }
-    }
-    const { error } = await supabase.from('cards').insert({ subject, topic, reason, question, answer, photo_path })
-    if (error) {
-      if (photo_path) await supabase.storage.from(PHOTO_BUCKET).remove([photo_path])
+    const form = new FormData()
+    form.set('subject', subject!)
+    form.set('topic', topic)
+    form.set('reason', reason!)
+    form.set('question', question)
+    form.set('answer', answer)
+    if (photo) form.set('photo', photo, 'soru.jpg')
+    try {
+      await api('/cards', { method: 'POST', body: form })
+    } catch {
       setSaving(false)
       return setError('Kaydedilemedi, tekrar dene.')
     }

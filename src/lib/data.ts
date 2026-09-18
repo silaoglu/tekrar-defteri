@@ -22,7 +22,7 @@ export type Card = {
   reason: Reason
   question: string
   answer: string
-  photo_path: string | null
+  photo_url: string | null
   box: number
   due_date: string
 }

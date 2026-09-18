@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase, PHOTO_BUCKET } from '../lib/supabase'
+import { api } from '../lib/api'
 import { isoDate, schedule, type Card } from '../lib/data'
 
 type Props = { toast: (t: string) => void; goAdd: () => void }
@@ -10,50 +10,32 @@ export default function Today({ toast, goAdd }: Props) {
   const [i, setI] = useState(0)
   const [open, setOpen] = useState(false)
   const [known, setKnown] = useState(0)
-  const [photo, setPhoto] = useState<{ path: string; url: string } | null>(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     let live = true
-    supabase
-      .from('cards')
-      .select('id,subject,topic,reason,question,answer,photo_path,box,due_date')
-      .lte('due_date', isoDate())
-      .order('due_date')
-      .then(({ data, error }) => {
-        if (!live) return
-        if (error) setError('Kartlar yüklenemedi.')
-        else setCards(data as Card[])
-      })
+    api<Card[]>(`/cards/due?on=${isoDate()}`)
+      .then((data) => live && setCards(data))
+      .catch(() => live && setError('Kartlar yüklenemedi.'))
     return () => {
       live = false
     }
   }, [])
 
   const card = cards?.[i]
-  const path = card?.photo_path ?? null
-  useEffect(() => {
-    if (!path) return
-    let live = true
-    supabase.storage
-      .from(PHOTO_BUCKET)
-      .createSignedUrl(path, 3600)
-      .then(({ data }) => {
-        if (live && data) setPhoto({ path, url: data.signedUrl })
-      })
-    return () => {
-      live = false
-    }
-  }, [path])
-  const photoUrl = photo && photo.path === path ? photo.url : null
+  const photoUrl = card?.photo_url ?? null
 
   async function rate(wasKnown: boolean) {
     if (!card || saving) return
     setSaving(true)
     const next = schedule(card.box, wasKnown)
-    const { error } = await supabase.from('cards').update({ box: next.box, due_date: next.due_date }).eq('id', card.id)
+    try {
+      await api(`/cards/${card.id}`, { method: 'PATCH', json: { box: next.box, due_date: next.due_date } })
+    } catch {
+      setSaving(false)
+      return toast('Kaydedilemedi, tekrar dene')
+    }
     setSaving(false)
-    if (error) return toast('Kaydedilemedi, tekrar dene')
     if (wasKnown) setKnown((k) => k + 1)
     toast(next.days === 1 ? 'Yarın tekrar gelecek' : `Sonraki tekrar ${next.days} gün sonra`)
     setI((n) => n + 1)
